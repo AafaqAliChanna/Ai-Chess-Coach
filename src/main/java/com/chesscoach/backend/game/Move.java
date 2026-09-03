@@ -1,5 +1,6 @@
 package com.chesscoach.backend.game;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -18,16 +19,17 @@ public class Move {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "game_id", nullable = false)
+    @JsonIgnore
     private Game game;
 
     @Column(name = "ply_number", nullable = false)
-    private int plyNumber; // half-move count: 1 = White's 1st move, 2 = Black's 1st, etc.
+    private int plyNumber;
 
     @Column(nullable = false)
-    private String san; // Standard Algebraic Notation, e.g. "Nf3"
+    private String san;
 
     @Column(name = "fen_after", nullable = false, columnDefinition = "TEXT")
-    private String fenAfter; // full board state after this move
+    private String fenAfter;
 
     public Move(Game game, int plyNumber, String san, String fenAfter) {
         this.game = game;
