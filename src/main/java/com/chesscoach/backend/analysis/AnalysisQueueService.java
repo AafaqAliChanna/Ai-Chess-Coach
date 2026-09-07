@@ -6,6 +6,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class AnalysisQueueService {
@@ -35,5 +37,24 @@ public class AnalysisQueueService {
             // failing loudly here beats silently dropping the analysis request.
             throw new IllegalStateException("Failed to serialize AnalysisJob for game " + job.gameId(), e);
         }
+    }
+
+    /**
+     * Publish only after the database transaction commits. The worker can
+     * otherwise consume the job while the upload transaction is still
+     * uncommitted and observe zero moves, permanently losing the job.
+     */
+    public void enqueueAfterCommit(AnalysisJob job) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            enqueue(job);
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                enqueue(job);
+            }
+        });
     }
 }
