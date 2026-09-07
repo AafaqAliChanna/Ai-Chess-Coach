@@ -6,4 +6,5 @@ import java.util.List;
 
 public interface MoveEvaluationRepository extends JpaRepository<MoveEvaluation, Long> {
     List<MoveEvaluation> findByMove_GameIdOrderByMove_PlyNumberAsc(Long gameId);
+    boolean existsByMoveId(Long moveId);
 }
