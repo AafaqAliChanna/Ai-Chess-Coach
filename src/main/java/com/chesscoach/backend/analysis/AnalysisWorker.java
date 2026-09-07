@@ -3,6 +3,8 @@ package com.chesscoach.backend.analysis;
 import com.chesscoach.backend.analysis.engine.EngineEvaluation;
 import com.chesscoach.backend.analysis.engine.StockfishEngine;
 import com.chesscoach.backend.analysis.engine.StockfishEnginePool;
+import com.chesscoach.backend.game.Game;
+import com.chesscoach.backend.game.GameRepository;
 import com.chesscoach.backend.game.Move;
 import com.chesscoach.backend.game.MoveRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -40,8 +42,10 @@ public class AnalysisWorker {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final StockfishEnginePool enginePool;
+    private final GameRepository gameRepository;
     private final MoveRepository moveRepository;
     private final MoveEvaluationRepository moveEvaluationRepository;
+    private final AnalysisQueueService analysisQueueService;
 
     private ExecutorService workerThread;
     private volatile boolean running = true;
@@ -49,13 +53,17 @@ public class AnalysisWorker {
     public AnalysisWorker(StringRedisTemplate redisTemplate,
                            ObjectMapper objectMapper,
                            StockfishEnginePool enginePool,
+                           GameRepository gameRepository,
                            MoveRepository moveRepository,
-                           MoveEvaluationRepository moveEvaluationRepository) {
+                           MoveEvaluationRepository moveEvaluationRepository,
+                           AnalysisQueueService analysisQueueService) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.enginePool = enginePool;
+        this.gameRepository = gameRepository;
         this.moveRepository = moveRepository;
         this.moveEvaluationRepository = moveEvaluationRepository;
+        this.analysisQueueService = analysisQueueService;
     }
 
     @PostConstruct
@@ -69,8 +77,27 @@ public class AnalysisWorker {
             t.setDaemon(true);
             return t;
         });
+        workerThread.submit(this::recoverPendingGames);
         workerThread.submit(this::runLoop);
         log.info("AnalysisWorker started");
+    }
+
+    private void recoverPendingGames() {
+        try {
+            for (Game game : gameRepository.findAll()) {
+                List<Move> moves = moveRepository.findByGameIdOrderByPlyNumberAsc(game.getId());
+                long evaluatedMoves = moveEvaluationRepository
+                        .findByMove_GameIdOrderByMove_PlyNumberAsc(game.getId())
+                        .size();
+                if (!moves.isEmpty() && evaluatedMoves < moves.size()) {
+                    log.info("Re-queueing incomplete analysis for game {} ({}/{} moves)",
+                            game.getId(), evaluatedMoves, moves.size());
+                    analysisQueueService.enqueue(AnalysisJob.forGame(game.getId()));
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to recover pending analysis jobs", e);
+        }
     }
 
     private void runLoop() {
@@ -124,6 +151,9 @@ public class AnalysisWorker {
 
     @Transactional
     protected void analyzeAndStore(StockfishEngine engine, Move move) {
+        if (moveEvaluationRepository.existsByMoveId(move.getId())) {
+            return;
+        }
         EngineEvaluation eval = engine.evaluate(move.getFenAfter(), SEARCH_DEPTH);
         MoveEvaluation entity = new MoveEvaluation(
                 move, eval.bestMoveUci(), eval.scoreCentipawns(), eval.mateInMoves());
