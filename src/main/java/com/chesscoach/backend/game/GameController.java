@@ -18,15 +18,18 @@ public class GameController {
     private final MoveRepository moveRepository;
     private final PgnParsingService pgnParsingService;
     private final AnalysisQueueService analysisQueueService;
+    private final GameDeletionService gameDeletionService;
 
     public GameController(GameRepository gameRepository,
                            MoveRepository moveRepository,
                            PgnParsingService pgnParsingService,
-                           AnalysisQueueService analysisQueueService) {
+                           AnalysisQueueService analysisQueueService,
+                           GameDeletionService gameDeletionService) {
         this.gameRepository = gameRepository;
         this.moveRepository = moveRepository;
         this.pgnParsingService = pgnParsingService;
         this.analysisQueueService = analysisQueueService;
+        this.gameDeletionService = gameDeletionService;
     }
 
     @PostMapping
@@ -34,6 +37,7 @@ public class GameController {
     public ResponseEntity<Game> uploadGame(@Valid @RequestBody GameUploadRequest request) {
         Game game = new Game();
         game.setPgn(request.pgn());
+        game.setTitle(request.title());
         game.setWhitePlayer(request.whitePlayer());
         game.setBlackPlayer(request.blackPlayer());
         game.setResult(request.result());
@@ -42,10 +46,6 @@ public class GameController {
         List<Move> moves = pgnParsingService.parseMoves(savedGame, request.pgn());
         moveRepository.saveAll(moves);
 
-        // Enqueue AFTER the transaction's writes are staged, not before —
-        // if parsing above throws, @Transactional rolls back the Game/Move
-        // inserts, and we must not have already told the worker to analyze
-        // a game that's about to cease to exist.
         analysisQueueService.enqueueAfterCommit(AnalysisJob.forGame(savedGame.getId()));
 
         return ResponseEntity.status(HttpStatus.CREATED).body(savedGame);
@@ -69,5 +69,14 @@ public class GameController {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(moveRepository.findByGameIdOrderByPlyNumberAsc(id));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteGame(@PathVariable Long id) {
+        if (!gameRepository.existsById(id)) {
+            return ResponseEntity.notFound().build();
+        }
+        gameDeletionService.deleteGameCascade(id);
+        return ResponseEntity.noContent().build();
     }
 }
