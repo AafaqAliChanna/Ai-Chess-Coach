@@ -46,7 +46,7 @@ public class GameController {
         // if parsing above throws, @Transactional rolls back the Game/Move
         // inserts, and we must not have already told the worker to analyze
         // a game that's about to cease to exist.
-        analysisQueueService.enqueue(AnalysisJob.forGame(savedGame.getId()));
+        analysisQueueService.enqueueAfterCommit(AnalysisJob.forGame(savedGame.getId()));
 
         return ResponseEntity.status(HttpStatus.CREATED).body(savedGame);
     }
