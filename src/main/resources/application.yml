@@ -14,3 +14,6 @@ spring:
       port: 6379
   profiles:
     active: local
+ollama:
+  base-url: http://localhost:11434
+  model: llama3.2
