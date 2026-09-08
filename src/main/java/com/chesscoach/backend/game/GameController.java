@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PatchMapping;
 
 import java.util.List;
 
@@ -79,4 +80,17 @@ public class GameController {
         gameDeletionService.deleteGameCascade(id);
         return ResponseEntity.noContent().build();
     }
+
+        @PatchMapping("/{id}")
+    public ResponseEntity<Game> updateGameTitle(@PathVariable Long id,
+                                                 @RequestBody GameTitleUpdateRequest request) {
+        return gameRepository.findById(id)
+                .map(game -> {
+                    game.setTitle(request.title());
+                    Game saved = gameRepository.save(game);
+                    return ResponseEntity.ok(saved);
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
 }
