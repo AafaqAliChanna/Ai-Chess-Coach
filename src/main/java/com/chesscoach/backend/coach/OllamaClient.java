@@ -9,7 +9,9 @@ import org.springframework.web.client.RestClientException;
 import java.time.Duration;
 
 @Component
-public class OllamaClient {
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+        name = "coaching.provider", havingValue = "ollama", matchIfMissing = true)
+public class OllamaClient implements LlmClient {
 
     private static final Logger log = LoggerFactory.getLogger(OllamaClient.class);
 
@@ -33,6 +35,7 @@ public class OllamaClient {
      * streaming to the frontend is a nice-to-have UX improvement, not a V1
      * requirement, and adds real complexity (SSE/websockets) we don't need yet.
      */
+    @Override
     public String generate(String prompt) {
         try {
             OllamaGenerateResponse response = restClient.post()
