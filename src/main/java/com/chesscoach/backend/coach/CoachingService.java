@@ -10,11 +10,11 @@ import java.util.List;
 public class CoachingService {
 
     private final GameReportService gameReportService;
-    private final OllamaClient ollamaClient;
+        private final LlmClient llmClient;
 
-    public CoachingService(GameReportService gameReportService, OllamaClient ollamaClient) {
+    public CoachingService(GameReportService gameReportService, LlmClient llmClient) {
         this.gameReportService = gameReportService;
-        this.ollamaClient = ollamaClient;
+        this.llmClient = llmClient;
     }
 
     public String generateCoachingSummary(Long gameId) {
@@ -32,6 +32,6 @@ public class CoachingService {
         }
 
         String prompt = CoachingPromptBuilder.buildPrompt(flagged);
-        return ollamaClient.generate(prompt);
+        return llmClient.generate(prompt);
     }
 }
