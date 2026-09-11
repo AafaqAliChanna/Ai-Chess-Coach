@@ -8,7 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import com.chesscoach.backend.coach.CoachingException;
+import com.chesscoach.backend.auth.AuthException;
 
 import java.time.Instant;
 
@@ -41,6 +41,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ErrorResponse(
                 Instant.now(), 500, "Internal Server Error",
                 "Something went wrong on our end."
+        ));
+    }
+
+        @ExceptionHandler(AuthException.class)
+    public ResponseEntity<ErrorResponse> handleAuth(AuthException ex) {
+        log.info("Auth request failed: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse(
+                Instant.now(), 401, "Unauthorized", ex.getMessage()
         ));
     }
 }
