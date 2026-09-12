@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import com.chesscoach.backend.auth.AuthException;
+import com.chesscoach.backend.auth.ForbiddenException;
 
 import java.time.Instant;
 
@@ -49,6 +50,14 @@ public class GlobalExceptionHandler {
         log.info("Auth request failed: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse(
                 Instant.now(), 401, "Unauthorized", ex.getMessage()
+        ));
+    }
+
+        @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ErrorResponse> handleForbidden(ForbiddenException ex) {
+        log.info("Forbidden: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse(
+                Instant.now(), 403, "Forbidden", ex.getMessage()
         ));
     }
 }
