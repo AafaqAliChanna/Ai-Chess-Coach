@@ -60,4 +60,12 @@ public class GlobalExceptionHandler {
                 Instant.now(), 403, "Forbidden", ex.getMessage()
         ));
     }
+
+        @ExceptionHandler(com.chesscoach.backend.integrations.chesscom.ChessComImportException.class)
+    public ResponseEntity<ErrorResponse> handleChessComImport(com.chesscoach.backend.integrations.chesscom.ChessComImportException ex) {
+        log.warn("Chess.com import failed: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(new ErrorResponse(
+                Instant.now(), 502, "Chess.com Import Failed", ex.getMessage()
+        ));
+    }
 }
