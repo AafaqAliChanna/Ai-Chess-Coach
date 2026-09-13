@@ -7,4 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface GameRepository extends JpaRepository<Game, Long> {
 
     List<Game> findByWhitePlayerIgnoreCaseOrBlackPlayerIgnoreCase(String whitePlayer, String blackPlayer);
+
+    boolean existsBySourceUrl(String sourceUrl);
 }
