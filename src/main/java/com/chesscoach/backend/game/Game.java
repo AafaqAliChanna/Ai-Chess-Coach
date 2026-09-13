@@ -38,6 +38,9 @@ public class Game {
     @Column(name = "user_id")
     private Long userId;
 
+    @Column(name = "source_url", unique = true)
+    private String sourceUrl;
+
     @Column(name = "uploaded_at", nullable = false)
     private Instant uploadedAt = Instant.now();
 }
