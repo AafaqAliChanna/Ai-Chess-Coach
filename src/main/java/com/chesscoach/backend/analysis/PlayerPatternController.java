@@ -10,13 +10,20 @@ import org.springframework.web.bind.annotation.RestController;
 public class PlayerPatternController {
 
     private final PlayerPatternService playerPatternService;
+    private final ProgressService progressService;
 
-    public PlayerPatternController(PlayerPatternService playerPatternService) {
+    public PlayerPatternController(PlayerPatternService playerPatternService, ProgressService progressService) {
         this.playerPatternService = playerPatternService;
+        this.progressService = progressService;
     }
 
     @GetMapping("/{name}/patterns")
     public PlayerPatternSummary getPatterns(@PathVariable String name) {
         return playerPatternService.buildSummary(name);
+    }
+
+    @GetMapping("/{name}/progress")
+    public ProgressResponse getProgress(@PathVariable String name) {
+        return progressService.buildProgress(name);
     }
 }
