@@ -2,6 +2,8 @@ package com.chesscoach.backend.analysis.engine;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -49,4 +51,45 @@ class StockfishEngineTest {
             assertEquals(1, Math.abs(eval.mateInMoves()), "Should be mate in exactly 1");
         }
     }
+
+        @Test
+    void evaluatesTopMovesReturnsMultipleRankedCandidates() {
+        assumeTrue(STOCKFISH_PATH != null, "Skipping: pass -Dstockfish.path=<path> to run this test");
+
+        String startingFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+        try (StockfishEngine engine = new StockfishEngine(STOCKFISH_PATH)) {
+            engine.start();
+            List<CandidateMove> candidates = engine.evaluateTopMoves(startingFen, 10, 3);
+
+            assertEquals(3, candidates.size(), "Should return exactly 3 candidates when 3 requested");
+            assertEquals(1, candidates.get(0).rank());
+            assertEquals(2, candidates.get(1).rank());
+            assertEquals(3, candidates.get(2).rank());
+            // Rank 1 should be evaluated at least as good as rank 2 (both from White's perspective)
+            assertTrue(candidates.get(0).scoreCentipawns() >= candidates.get(1).scoreCentipawns(),
+                    "Best-ranked move should have score >= second-ranked move");
+        }
+    }
+
+    @Test
+    void evaluateStillWorksCorrectlyAfterEvaluateTopMoves() {
+        assumeTrue(STOCKFISH_PATH != null, "Skipping: pass -Dstockfish.path=<path> to run this test");
+
+        String startingFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+        try (StockfishEngine engine = new StockfishEngine(STOCKFISH_PATH)) {
+            engine.start();
+            engine.evaluateTopMoves(startingFen, 10, 3); // leaves MultiPV at 3 if the reset were missing
+
+            // This is the actual regression test: if the defensive reset in
+            // evaluate() didn't exist, this call would misparse multi-line
+            // output from a still-elevated MultiPV setting.
+            EngineEvaluation eval = engine.evaluate(startingFen, 10);
+            assertNotNull(eval.bestMoveUci());
+            assertFalse(eval.isMate());
+        }
+    }
+
+
 }
