@@ -8,6 +8,10 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -21,8 +25,8 @@ import java.util.regex.Pattern;
  *
  * NOT thread-safe by design — exactly one caller (the pool/worker) should use a
  * given instance at a time. Concurrency across multiple games is handled by
- * running multiple StockfishEngine instances (StockfishEnginePool, next step),
- * not by sharing one instance across threads.
+ * running multiple StockfishEngine instances (StockfishEnginePool), not by
+ * sharing one instance across threads.
  */
 public class StockfishEngine implements AutoCloseable {
 
@@ -39,17 +43,10 @@ public class StockfishEngine implements AutoCloseable {
         this.executablePath = executablePath;
     }
 
-    /**
-     * Starts the process and performs the standard UCI handshake:
-     * "uci" -> wait for "uciok", then "isready" -> wait for "readyok".
-     * Throws EngineException if the process fails to start or doesn't
-     * respond correctly within the timeout — a hung/broken engine must
-     * fail loudly here, not silently produce garbage evaluations later.
-     */
     public void start() {
         try {
             ProcessBuilder builder = new ProcessBuilder(executablePath);
-            builder.redirectErrorStream(true); // merge stderr into stdout — one stream to read
+            builder.redirectErrorStream(true);
             process = builder.start();
         } catch (IOException e) {
             throw new EngineException("Failed to start Stockfish process at: " + executablePath, e);
@@ -61,10 +58,6 @@ public class StockfishEngine implements AutoCloseable {
         BufferedReader stdout = new BufferedReader(
                 new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
 
-        // Reading a process's stdout must happen on its own thread — if we tried
-        // to read and write from the same thread, both sides could deadlock
-        // waiting on full OS pipe buffers. This thread's only job is to move
-        // lines from the process into the queue as they arrive.
         readerThread = new Thread(() -> {
             try {
                 String line;
@@ -85,24 +78,20 @@ public class StockfishEngine implements AutoCloseable {
         readUntil(line -> line.equals("readyok"), line -> {}, Duration.ofSeconds(10));
     }
 
-    /**
-     * Evaluates a single position to a fixed depth and returns the engine's
-     * best move plus its evaluation of that position.
-     *
-     * depthLimit is intentionally required, not optional — an unbounded
-     * "go" with no depth/time limit can run indefinitely, and that's
-     * exactly the failure mode that would silently hang a worker thread
-     * forever. We always bound the search explicitly.
-     */
     public EngineEvaluation evaluate(String fen, int depthLimit) {
         if (!isAlive()) {
             throw new EngineException("Cannot evaluate: engine process is not running (crashed or not started).");
         }
 
+        // Defensive reset: this engine instance is pooled and shared. If a
+        // prior caller left MultiPV elevated (via evaluateTopMoves), this
+        // call would otherwise misparse multi-line output. Never trust
+        // prior state on a shared instance — always set it explicitly.
+        sendCommand("setoption name MultiPV value 1");
         sendCommand("position fen " + fen);
         sendCommand("go depth " + depthLimit);
 
-        int[] lastScore = {0};       // [0]=type(0=none,1=cp,2=mate), [1]=value — simple mutable capture for the lambda
+        int[] lastScore = {0};
         int[] scoreValue = {0};
 
         String bestMoveLine = readUntil(
@@ -114,7 +103,7 @@ public class StockfishEngine implements AutoCloseable {
                         scoreValue[0] = Integer.parseInt(m.group(2));
                     }
                 },
-                Duration.ofSeconds(30) // hard cap: depth-limited search should never legitimately take this long
+                Duration.ofSeconds(30)
         );
 
         String[] parts = bestMoveLine.split("\\s+");
@@ -127,6 +116,51 @@ public class StockfishEngine implements AutoCloseable {
         Integer cp = lastScore[0] == 1 ? scoreValue[0] : null;
         Integer mate = lastScore[0] == 2 ? scoreValue[0] : null;
         return new EngineEvaluation(bestMove, cp, mate);
+    }
+
+    /**
+     * Returns Stockfish's top N candidate moves for a position, ranked best
+     * to worst, each with its own evaluation. Needed for detecting "only
+     * move" / "great move" situations, which single-PV evaluate() cannot
+     * tell you — it only ever sees the single best line.
+     */
+    public List<CandidateMove> evaluateTopMoves(String fen, int depthLimit, int numLines) {
+        if (!isAlive()) {
+            throw new EngineException("Cannot evaluate: engine process is not running (crashed or not started).");
+        }
+
+        sendCommand("setoption name MultiPV value " + numLines);
+        sendCommand("position fen " + fen);
+        sendCommand("go depth " + depthLimit);
+
+        Map<Integer, CandidateMove> byRank = new TreeMap<>();
+        Pattern multiPvPattern = Pattern.compile("multipv (\\d+).*?score (cp|mate) (-?\\d+).*? pv (\\S+)");
+
+        readUntil(
+                line -> line.startsWith("bestmove"),
+                line -> {
+                    Matcher m = multiPvPattern.matcher(line);
+                    if (m.find()) {
+                        int rank = Integer.parseInt(m.group(1));
+                        boolean isMate = m.group(2).equals("mate");
+                        int value = Integer.parseInt(m.group(3));
+                        byRank.put(rank, new CandidateMove(rank, m.group(4),
+                                isMate ? null : value, isMate ? value : null));
+                    }
+                },
+                Duration.ofSeconds(30));
+
+        // Reset back to single-line mode immediately — this engine instance
+        // is pooled and shared. Leaving MultiPV elevated would silently
+        // break the next caller's evaluate() call if they forgot to reset it
+        // themselves (they don't have to — evaluate() also resets defensively,
+        // but resetting here too means this method never depends on that).
+        sendCommand("setoption name MultiPV value 1");
+
+        if (byRank.isEmpty()) {
+            throw new EngineException("Stockfish returned no candidate moves for FEN: " + fen);
+        }
+        return new ArrayList<>(byRank.values());
     }
 
     public boolean isAlive() {
@@ -146,15 +180,6 @@ public class StockfishEngine implements AutoCloseable {
         }
     }
 
-    /**
-     * Drains lines from the queue, passing each to lineHandler, until stopCondition
-     * matches or the timeout elapses. Returns the matching (final) line.
-     *
-     * This is the core piece that makes the wrapper safe to use inside a web app:
-     * BufferedReader.readLine() alone blocks forever with no way to time out.
-     * Polling a BlockingQueue with a deadline gives us a hard upper bound on
-     * how long any single call can hang, no matter what the process does.
-     */
     private String readUntil(Predicate<String> stopCondition, Consumer<String> lineHandler, Duration timeout) {
         Instant deadline = Instant.now().plus(timeout);
         while (true) {
@@ -171,7 +196,7 @@ public class StockfishEngine implements AutoCloseable {
                 throw new EngineException("Interrupted while waiting for Stockfish response.", e);
             }
             if (line == null) {
-                continue; // poll timed out this iteration but overall deadline not yet reached; loop re-checks deadline
+                continue;
             }
             lineHandler.accept(line);
             if (stopCondition.test(line)) {
@@ -180,12 +205,6 @@ public class StockfishEngine implements AutoCloseable {
         }
     }
 
-    /**
-     * Graceful shutdown: ask the engine to quit via UCI protocol first,
-     * give it a moment to exit cleanly, then force-kill if it didn't.
-     * Never leave a Stockfish process running after this returns — an
-     * orphaned engine process is a real resource leak under load.
-     */
     @Override
     public void close() {
         if (process == null) return;
