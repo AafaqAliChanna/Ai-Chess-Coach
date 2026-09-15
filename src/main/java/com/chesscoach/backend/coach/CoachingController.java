@@ -20,11 +20,10 @@ public class CoachingController {
     }
 
     @GetMapping("/{id}/coaching")
-    public ResponseEntity<CoachingResponse> getCoaching(@PathVariable Long id) {
+    public ResponseEntity<CoachingSummary> getCoaching(@PathVariable Long id) {
         if (!gameRepository.existsById(id)) {
             return ResponseEntity.notFound().build();
         }
-        String summary = coachingService.generateCoachingSummary(id);
-        return ResponseEntity.ok(new CoachingResponse(summary));
+        return ResponseEntity.ok(coachingService.generateCoachingSummary(id));
     }
 }
