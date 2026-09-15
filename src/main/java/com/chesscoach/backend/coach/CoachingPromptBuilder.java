@@ -5,12 +5,6 @@ import com.chesscoach.backend.analysis.MoveReportEntry;
 
 import java.util.List;
 
-/**
- * Turns Stockfish's already-computed facts into a grounded prompt.
- * The LLM's job is ONLY to explain these facts in plain language —
- * per the AI guardrail principle from the project blueprint, it is
- * never asked to evaluate a position or suggest a move itself.
- */
 public class CoachingPromptBuilder {
 
     private CoachingPromptBuilder() {}
@@ -18,16 +12,27 @@ public class CoachingPromptBuilder {
     public static String buildPrompt(List<MoveReportEntry> flaggedMoves) {
         StringBuilder sb = new StringBuilder();
         sb.append("You are a chess coach. Below are specific mistakes a player made in a game, ")
-          .append("already identified by a chess engine (Stockfish). For each one, explain in ")
-          .append("plain, encouraging language why it was a mistake and what the better move ")
-          .append("achieves instead. Do NOT invent moves, evaluations, or variations beyond what ")
-          .append("is given below — only explain the facts provided. Keep each explanation to 2-3 ")
-          .append("sentences. Number your explanations to match the move numbers given.\n\n");
+          .append("already identified by a chess engine (Stockfish). Respond with STRUCTURED JSON ")
+          .append("ONLY \u2014 no markdown code fences, no text before or after the JSON.\n\n")
+          .append("Respond with EXACTLY this JSON shape:\n")
+          .append("{\n")
+          .append("  \"strengths\": [\"short observation\", ...],\n")
+          .append("  \"weaknesses\": [\"short observation\", ...],\n")
+          .append("  \"keyMoments\": [ {\"plyNumber\": <number from the list below>, ")
+          .append("\"comment\": \"2-3 sentence explanation of why this specific move was a mistake ")
+          .append("and what the recommended move achieves instead\"}, ... ],\n")
+          .append("  \"recommendation\": \"1-2 sentence overall suggestion for what to practice next\"\n")
+          .append("}\n\n")
+          .append("Rules:\n")
+          .append("- Do NOT invent moves, evaluations, or variations beyond what is given below.\n")
+          .append("- Include a keyMoments entry for EVERY move listed below, using its exact plyNumber.\n")
+          .append("- strengths/weaknesses should be brief, general observations (1-4 items each).\n\n")
+          .append("Mistakes to analyze:\n");
 
         for (MoveReportEntry entry : flaggedMoves) {
             sb.append(String.format(
-                    "Move %d: player played %s (classified as %s, lost %d centipawns). " +
-                    "The engine's recommended move instead was: %s.%n",
+                    "Ply %d: player played %s (classified as %s, lost %d centipawns). " +
+                    "Engine's recommended move instead: %s.%n",
                     entry.plyNumber(), entry.san(), entry.classification(),
                     entry.centipawnLoss(), entry.bestMoveUci()));
         }
