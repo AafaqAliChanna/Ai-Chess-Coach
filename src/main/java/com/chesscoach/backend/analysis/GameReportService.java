@@ -59,11 +59,20 @@ public class GameReportService {
                     EvaluationScale.toComparable(currentEval.getScoreCentipawns(), currentEval.getMateInMoves()));
 
             long loss = Math.max(0, beforeMoverScore - afterMoverScore);
+
+            // FIX: bestMoveUci must reflect what the MOVER should have played,
+            // i.e. Stockfish's recommendation for the position they actually
+            // faced (previousEval) — not currentEval, which is the engine's
+            // recommendation for the OPPONENT'S reply to the move just played.
+            // null for ply 1: no evaluation of the literal starting position
+            // exists (same documented gap as beforeMoverScore's 0L default above).
+            String bestMoveUci = previousEval != null ? previousEval.getBestMoveUci() : null;
+
             report.add(new MoveReportEntry(
                     move.getPlyNumber(),
                     move.getSan(),
                     move.getFenAfter(),
-                    currentEval.getBestMoveUci(),
+                    bestMoveUci,
                     currentEval.getScoreCentipawns(),
                     currentEval.getMateInMoves(),
                     loss,
