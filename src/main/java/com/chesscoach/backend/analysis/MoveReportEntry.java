@@ -8,6 +8,7 @@ public record MoveReportEntry(
         Integer scoreCentipawns,
         Integer mateInMoves,
         long centipawnLoss,
+        double winPercentLoss,
         MoveClassification classification,
         GamePhase gamePhase
 ) {}
