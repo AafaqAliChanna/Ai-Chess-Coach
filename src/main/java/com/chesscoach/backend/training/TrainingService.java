@@ -15,8 +15,6 @@ import java.util.List;
 @Service
 public class TrainingService {
 
-    // Standard chess starting position — used as fenBefore only for ply 1,
-    // where there is no "previous move" to derive it from.
     private static final String STARTING_FEN =
             "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -28,13 +26,6 @@ public class TrainingService {
         this.gameReportService = gameReportService;
     }
 
-    /**
-     * Builds up to `limit` training exercises from a player's own real
-     * mistakes, worst (highest centipawn loss) first. Optional phaseFilter
-     * narrows to one phase — e.g. "give me only endgame exercises" — since
-     * the pattern engine (Phase 7) might tell a player that's their weakest
-     * area specifically.
-     */
     public List<TrainingExercise> buildExercises(String playerName, int limit, GamePhase phaseFilter) {
         List<Game> games = gameRepository.findByWhitePlayerIgnoreCaseOrBlackPlayerIgnoreCase(playerName, playerName);
         List<TrainingExercise> candidates = new ArrayList<>();
@@ -55,12 +46,9 @@ public class TrainingService {
 
                 boolean thisMoveWasPlayers = (entry.plyNumber() % 2 == 1) == playerIsWhite;
                 if (!thisMoveWasPlayers) continue;
-
                 if (entry.classification() == MoveClassification.NONE) continue;
                 if (phaseFilter != null && entry.gamePhase() != phaseFilter) continue;
 
-                // fenBefore = previous ply's fenAfter (same game, same report list,
-                // already in memory) — or the starting position for ply 1.
                 String fenBefore = (i == 0) ? STARTING_FEN : report.get(i - 1).fenAfter();
 
                 candidates.add(new TrainingExercise(
@@ -71,12 +59,16 @@ public class TrainingService {
                         entry.bestMoveUci(),
                         entry.classification(),
                         entry.gamePhase(),
-                        entry.centipawnLoss()));
+                        entry.centipawnLoss(),
+                        entry.winPercentLoss()));
             }
         }
 
+        // Sorted by win-probability loss now, not raw centipawn loss \u2014 a
+        // "worst mistake" ranking should reflect genuine practical severity,
+        // the entire point of this whole upgrade.
         return candidates.stream()
-                .sorted(Comparator.comparingLong(TrainingExercise::centipawnLoss).reversed())
+                .sorted(Comparator.comparingDouble(TrainingExercise::winPercentLoss).reversed())
                 .limit(limit)
                 .toList();
     }
