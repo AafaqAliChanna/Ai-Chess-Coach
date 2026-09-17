@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import com.github.bhlangonijr.chesslib.Board;
 
 /**
  * Consumer side of the analysis queue: runs on its own dedicated thread,
@@ -149,15 +150,30 @@ public class AnalysisWorker {
         }
     }
 
-    @Transactional
+        @Transactional
     protected void analyzeAndStore(StockfishEngine engine, Move move) {
-        if (moveEvaluationRepository.existsByMoveId(move.getId())) {
+        if (isTerminalPosition(move.getFenAfter())) {
+            // Checkmate or stalemate: there is no "best move" to recommend
+            // and no further evaluation to compute \u2014 the game is objectively
+            // over at this position. Storing a neutral/absent evaluation here
+            // (rather than crashing the whole job, as it did before this fix)
+            // means the report can display "game ended" for the final move
+            // instead of leaving it permanently PENDING.
+            MoveEvaluation terminalEntry = new MoveEvaluation(move, "(none)", null, null);
+            moveEvaluationRepository.save(terminalEntry);
             return;
         }
+
         EngineEvaluation eval = engine.evaluate(move.getFenAfter(), SEARCH_DEPTH);
         MoveEvaluation entity = new MoveEvaluation(
                 move, eval.bestMoveUci(), eval.scoreCentipawns(), eval.mateInMoves());
         moveEvaluationRepository.save(entity);
+    }
+
+    private boolean isTerminalPosition(String fen) {
+        Board board = new Board();
+        board.loadFromFen(fen);
+        return board.legalMoves().isEmpty();
     }
 
     @PreDestroy
