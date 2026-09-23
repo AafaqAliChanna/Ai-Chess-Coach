@@ -31,6 +31,16 @@ public class Game {
 
     private String result;
 
+    // Nullable, same reasoning as title: bullet/blitz/rapid/daily, supplied
+    // explicitly by the caller rather than parsed here. Manual uploads have
+    // no PGN headers left by the time they reach this entity (stripped in
+    // PgnParsingService before this point), so there's nothing to parse from
+    // even if we wanted to. Chess.com imports populate this from the
+    // Chess.com API's own time_class field instead — see
+    // ChessComImportService, which already has it available per-game.
+    @Column(name = "time_control")
+    private String timeControl;
+
     // Nullable on purpose, and no relationship/User entity yet — accounts don't
     // exist until Phase 9. Adding the raw column now avoids a backfill migration
     // once real user data exists; wiring it to an actual User FK is future work,
