@@ -31,12 +31,12 @@ public class GameController {
         this.currentUserProvider = currentUserProvider;
     }
 
-    @PostMapping
+        @PostMapping
     public ResponseEntity<Game> uploadGame(@Valid @RequestBody GameUploadRequest request) {
         Long userId = currentUserProvider.requireCurrentUserId();
         Game saved = gameIngestionService.ingest(
                 request.pgn(), request.title(), request.whitePlayer(), request.blackPlayer(),
-                request.result(), userId, null);
+                request.result(), request.timeControl(), userId, null);
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
 

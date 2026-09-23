@@ -33,13 +33,14 @@ public class GameIngestionService {
 
     @Transactional
     public Game ingest(String pgn, String title, String whitePlayer, String blackPlayer,
-                        String result, Long userId, String sourceUrl) {
+                        String result, String timeControl, Long userId, String sourceUrl) {
         Game game = new Game();
         game.setPgn(pgn);
         game.setTitle(title);
         game.setWhitePlayer(whitePlayer);
         game.setBlackPlayer(blackPlayer);
         game.setResult(result);
+        game.setTimeControl(timeControl);
         game.setUserId(userId);
         game.setSourceUrl(sourceUrl);
         Game saved = gameRepository.save(game);

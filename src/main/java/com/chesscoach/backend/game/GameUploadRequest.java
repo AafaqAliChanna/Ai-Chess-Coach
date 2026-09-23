@@ -8,5 +8,6 @@ public record GameUploadRequest(
         String title,
         String whitePlayer,
         String blackPlayer,
-        String result
+        String result,
+        String timeControl
 ) {}
