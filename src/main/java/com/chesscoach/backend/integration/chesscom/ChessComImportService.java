@@ -3,6 +3,8 @@ package com.chesscoach.backend.integrations.chesscom;
 import com.chesscoach.backend.auth.CurrentUserProvider;
 import com.chesscoach.backend.game.GameIngestionService;
 import com.chesscoach.backend.game.GameRepository;
+import static com.chesscoach.backend.integrations.chesscom.ChessComModels.*;
+
 import org.springframework.stereotype.Service;
 
 import java.time.YearMonth;
@@ -45,11 +47,11 @@ public class ChessComImportService {
                 skipped++;
                 continue;
             }
-            gameIngestionService.ingest(
+                        gameIngestionService.ingest(
                     game.pgn(),
                     game.white().username() + " vs " + game.black().username(),
                     game.white().username(), game.black().username(),
-                    deriveResult(game), userId, game.url());
+                    deriveResult(game), game.timeClass(), userId, game.url());
             imported++;
         }
 
