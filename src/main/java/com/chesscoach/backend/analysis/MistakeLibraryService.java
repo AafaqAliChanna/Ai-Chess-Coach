@@ -6,7 +6,9 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class MistakeLibraryService {
@@ -22,10 +24,11 @@ public class MistakeLibraryService {
         this.gameReportService = gameReportService;
     }
 
-    public MistakeLibraryResponse buildLibrary(String playerName, GamePhase phaseFilter, int limit, int offset) {
+    public MistakeLibraryResponse buildLibrary(String playerName, GamePhase phaseFilter,
+                                                PatternTag patternFilter, int limit, int offset) {
         List<Game> games = gameRepository.findByWhitePlayerIgnoreCaseOrBlackPlayerIgnoreCase(playerName, playerName);
 
-        List<MistakeLibraryEntry> allMistakes = new ArrayList<>();
+        List<MistakeLibraryEntry> matchingPhase = new ArrayList<>();
 
         for (Game game : games) {
             boolean playerIsWhite = game.getWhitePlayer() != null
@@ -47,8 +50,9 @@ public class MistakeLibraryService {
                 if (phaseFilter != null && entry.gamePhase() != phaseFilter) continue;
 
                 String fenBefore = (i == 0) ? STARTING_FEN : report.get(i - 1).fenAfter();
+                PatternTag tag = PatternDetector.classify(report, i, playerIsWhite);
 
-                allMistakes.add(new MistakeLibraryEntry(
+                matchingPhase.add(new MistakeLibraryEntry(
                         game.getId(),
                         game.getTitle(),
                         game.getUploadedAt(),
@@ -59,20 +63,34 @@ public class MistakeLibraryService {
                         entry.classification(),
                         entry.gamePhase(),
                         entry.centipawnLoss(),
-                        entry.winPercentLoss()));
+                        entry.winPercentLoss(),
+                        tag));
             }
         }
 
-        // Worst mistakes first, same severity-first convention TrainingService
-        // already uses — an assumption, not a locked-in contract. See the
-        // handoff note: easy to flip to chronological (Comparator.comparing
-        // on uploadedAt) if the frontend actually wants a straight timeline.
-        allMistakes.sort(Comparator.comparingDouble(MistakeLibraryEntry::winPercentLoss).reversed());
+        // Counts computed from the phase-filtered set BEFORE the pattern
+        // filter is applied — these drive filter-UI tab counts, which
+        // should show what's available to switch TO, not shrink to match
+        // whichever pattern happens to be selected right now.
+        Map<PatternTag, Integer> patternCounts = new EnumMap<>(PatternTag.class);
+        for (PatternTag tag : PatternTag.values()) {
+            patternCounts.put(tag, 0);
+        }
+        for (MistakeLibraryEntry entry : matchingPhase) {
+            patternCounts.merge(entry.patternTag(), 1, Integer::sum);
+        }
 
-        int total = allMistakes.size();
-        List<MistakeLibraryEntry> page = paginate(allMistakes, limit, Math.max(0, offset));
+        List<MistakeLibraryEntry> matching = (patternFilter == null)
+                ? matchingPhase
+                : matchingPhase.stream().filter(e -> e.patternTag() == patternFilter).toList();
 
-        return new MistakeLibraryResponse(playerName, total, limit, offset, page);
+        List<MistakeLibraryEntry> sorted = new ArrayList<>(matching);
+        sorted.sort(Comparator.comparingDouble(MistakeLibraryEntry::winPercentLoss).reversed());
+
+        int total = sorted.size();
+        List<MistakeLibraryEntry> page = paginate(sorted, limit, Math.max(0, offset));
+
+        return new MistakeLibraryResponse(playerName, total, limit, offset, patternCounts, page);
     }
 
     private List<MistakeLibraryEntry> paginate(List<MistakeLibraryEntry> all, int limit, int offset) {

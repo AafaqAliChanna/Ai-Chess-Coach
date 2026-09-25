@@ -13,5 +13,6 @@ public record MistakeLibraryEntry(
         MoveClassification classification,
         GamePhase gamePhase,
         long centipawnLoss,
-        double winPercentLoss
+        double winPercentLoss,
+        PatternTag patternTag
 ) {}
