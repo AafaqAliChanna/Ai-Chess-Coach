@@ -22,19 +22,13 @@ public class MistakeLibraryController {
     public MistakeLibraryResponse getMistakeLibrary(
             @PathVariable String name,
             @RequestParam(required = false) String phase,
+            @RequestParam(required = false) String pattern,
             @RequestParam(defaultValue = "20") int limit,
             @RequestParam(defaultValue = "0") int offset) {
-        return mistakeLibraryService.buildLibrary(name, parsePhase(phase), limit, offset);
+        return mistakeLibraryService.buildLibrary(
+                name, parsePhase(phase), parsePattern(pattern), limit, offset);
     }
 
-    // This is the actual fix for the 500 the frontend hit: Spring's default
-    // binder tries to convert an empty "phase=" query value straight into
-    // the GamePhase enum before this method body ever runs, and the
-    // resulting MethodArgumentTypeMismatchException falls through
-    // GlobalExceptionHandler's catch-all as an unhelpful 500. Taking phase
-    // as a raw String and parsing it ourselves means blank/missing = no
-    // filter, and only a genuinely unrecognized value becomes a real,
-    // explained 400.
     private GamePhase parsePhase(String phase) {
         if (phase == null || phase.isBlank()) {
             return null;
@@ -44,6 +38,18 @@ public class MistakeLibraryController {
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Unknown game phase \"" + phase + "\". Valid values: OPENING, MIDDLEGAME, ENDGAME.");
+        }
+    }
+
+    private PatternTag parsePattern(String pattern) {
+        if (pattern == null || pattern.isBlank()) {
+            return null;
+        }
+        try {
+            return PatternTag.valueOf(pattern.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Unknown pattern tag \"" + pattern + "\". Valid values: MISSED_MATE, ALLOWED_MATE, HANGING_PIECE, POSITIONAL.");
         }
     }
 }
