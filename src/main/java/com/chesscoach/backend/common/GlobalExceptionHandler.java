@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import com.chesscoach.backend.auth.AuthException;
 import com.chesscoach.backend.auth.ForbiddenException;
+import com.chesscoach.backend.training.TrainingAttemptException;
 
 import java.time.Instant;
 
@@ -58,6 +59,14 @@ public class GlobalExceptionHandler {
         log.info("Forbidden: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse(
                 Instant.now(), 403, "Forbidden", ex.getMessage()
+        ));
+    }
+
+        @ExceptionHandler(TrainingAttemptException.class)
+    public ResponseEntity<ErrorResponse> handleTrainingAttempt(TrainingAttemptException ex) {
+        log.info("Training attempt rejected: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(
+                Instant.now(), 400, "Invalid Training Attempt", ex.getMessage()
         ));
     }
 
