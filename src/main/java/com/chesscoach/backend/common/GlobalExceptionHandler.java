@@ -1,5 +1,7 @@
 package com.chesscoach.backend.common;
 
+import com.chesscoach.backend.analysis.GameLinesException;
+import com.chesscoach.backend.analysis.engine.EngineException;
 import com.chesscoach.backend.coach.CoachingException;
 import com.chesscoach.backend.game.InvalidPgnException;
 import org.slf4j.Logger;
@@ -10,7 +12,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import com.chesscoach.backend.auth.AuthException;
 import com.chesscoach.backend.auth.ForbiddenException;
-import com.chesscoach.backend.training.TrainingAttemptException;
 
 import java.time.Instant;
 
@@ -62,19 +63,27 @@ public class GlobalExceptionHandler {
         ));
     }
 
-        @ExceptionHandler(TrainingAttemptException.class)
-    public ResponseEntity<ErrorResponse> handleTrainingAttempt(TrainingAttemptException ex) {
-        log.info("Training attempt rejected: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(
-                Instant.now(), 400, "Invalid Training Attempt", ex.getMessage()
-        ));
-    }
-
         @ExceptionHandler(com.chesscoach.backend.integrations.chesscom.ChessComImportException.class)
     public ResponseEntity<ErrorResponse> handleChessComImport(com.chesscoach.backend.integrations.chesscom.ChessComImportException ex) {
         log.warn("Chess.com import failed: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(new ErrorResponse(
                 Instant.now(), 502, "Chess.com Import Failed", ex.getMessage()
+        ));
+    }
+
+    @ExceptionHandler(GameLinesException.class)
+    public ResponseEntity<ErrorResponse> handleGameLines(GameLinesException ex) {
+        log.info("Practice line request rejected: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(
+                Instant.now(), 400, "Invalid Practice Line Request", ex.getMessage()
+        ));
+    }
+
+    @ExceptionHandler(EngineException.class)
+    public ResponseEntity<ErrorResponse> handleEngine(EngineException ex) {
+        log.warn("Stockfish engine request failed: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(new ErrorResponse(
+                Instant.now(), 503, "Engine Unavailable", ex.getMessage()
         ));
     }
 }
