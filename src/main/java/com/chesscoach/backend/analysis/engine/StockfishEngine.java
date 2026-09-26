@@ -163,6 +163,48 @@ public class StockfishEngine implements AutoCloseable {
         return new ArrayList<>(byRank.values());
     }
 
+    /**
+     * Returns the top N candidate LINES for a position — not just the
+     * first move of each (that's evaluateTopMoves, used by Brilliant/
+     * Great/Good), but the engine's full principal variation per rank, for
+     * on-demand practice-position display. PV length is bounded by, but
+     * not guaranteed to equal, depthLimit — the engine reports whatever it
+     * actually found.
+     */
+    public List<EngineLine> evaluateLines(String fen, int depthLimit, int numLines) {
+        if (!isAlive()) {
+            throw new EngineException("Cannot evaluate: engine process is not running (crashed or not started).");
+        }
+
+        sendCommand("setoption name MultiPV value " + numLines);
+        sendCommand("position fen " + fen);
+        sendCommand("go depth " + depthLimit);
+
+        Map<Integer, EngineLine> byRank = new TreeMap<>();
+        Pattern multiPvLinePattern = Pattern.compile("multipv (\\d+).*?score (cp|mate) (-?\\d+).*? pv (.+)$");
+
+        readUntil(
+                line -> line.startsWith("bestmove"),
+                line -> {
+                    Matcher m = multiPvLinePattern.matcher(line);
+                    if (m.find()) {
+                        int rank = Integer.parseInt(m.group(1));
+                        boolean isMate = m.group(2).equals("mate");
+                        int value = Integer.parseInt(m.group(3));
+                        List<String> moves = List.of(m.group(4).trim().split("\\s+"));
+                        byRank.put(rank, new EngineLine(rank, isMate ? null : value, isMate ? value : null, moves));
+                    }
+                },
+                Duration.ofSeconds(30));
+
+        sendCommand("setoption name MultiPV value 1");
+
+        if (byRank.isEmpty()) {
+            throw new EngineException("Stockfish returned no lines for FEN: " + fen);
+        }
+        return new ArrayList<>(byRank.values());
+    }
+
     public boolean isAlive() {
         return process != null && process.isAlive();
     }
